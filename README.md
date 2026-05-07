@@ -1,6 +1,10 @@
 # flight-data-project
 
-This is an [Observable Framework](https://observablehq.com/framework/) app. To install the required dependencies, run:
+This GitHub contains all of our project files. The data cleaning is in `airline_data_cleaning.ipynb`, and the data analysis files are in `airline_delay_analysis_modeling.ipynb`. Part of the visualizations are contained in `matplot_visualizations.ipynb` while the other are contained in the JS app with directions below.
+
+---
+
+The visualizations are in an [Observable Framework](https://observablehq.com/framework/) app. To install the required dependencies, run:
 
 ```
 npm install
