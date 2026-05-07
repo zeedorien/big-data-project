@@ -27,6 +27,7 @@ The tooltip provides three metrics for each airline: the percentage of flights t
 import * as d3 from "npm:d3";
 import {resize, html} from "npm:@observablehq/stdlib";
 
+// Load flight data from CSV
 const flightData = await FileAttachment("data/flights.csv").csv({typed: true});
 
 // Get year range for title
@@ -36,6 +37,7 @@ const maxYear = d3.max(flightData, d => +d.year);
 // Aggregate all years by carrier_name
 const carrierMap = new Map(); // carrier_name -> { flights, delayedFlights, totalDelay }
 
+// Sum flights, delays, and delay minutes per carrier
 for (const row of flightData) {
   const carrier = row.carrier_name?.trim();
   if (!carrier) continue;
@@ -59,10 +61,13 @@ const data = Array.from(carrierMap.entries()).map(([carrier, vals]) => {
   return { carrier, flights: vals.flights, pctDelayed, avgDelayMinutes };
 });
 
+// If no data, display error message; otherwise render the plot
 if (data.length === 0) {
   display(html`<div style="color:red;">No carrier data found.</div>`);
 } else {
+  // Define the carrier bubble chart function
   function carrierBubblePlot(width) {
+    // Set dimensions and margins
     const height = 800;
     const margin = { top: 70, right: 40, bottom: 300, left: 90 };
 
@@ -118,12 +123,13 @@ if (data.length === 0) {
       .on("mousemove", (event, d) => showTooltip(d, event))
       .on("mouseleave", hideTooltip);
 
-    // Tooltip
+    // Tooltip group (hidden at start)
     const tooltip = svg.append("g").style("pointer-events", "none").attr("opacity", 0);
     const tipRect = tooltip.append("rect")
       .attr("fill", "white").attr("stroke", "#333").attr("rx", 5).attr("ry", 5);
     const tipText = tooltip.append("text").attr("font-size", 14).attr("x", 8).attr("y", 18).attr("fill", "#222");
 
+    // Show tooltip with carrier statistics
     function showTooltip(d, event) {
       const lines = [
         d.carrier,
@@ -131,6 +137,7 @@ if (data.length === 0) {
         `Avg delay: ${d.avgDelayMinutes.toFixed(1)} min`,
         `${d.flights.toLocaleString()} flights`
       ];
+      // Remove previous tspans and add new lines
       tipText.selectAll("tspan").remove();
       lines.forEach((line, i) =>
         tipText.append("tspan").attr("x", 8).attr("dy", i === 0 ? 0 : 16).text(line)
@@ -141,6 +148,7 @@ if (data.length === 0) {
       tooltip.attr("transform", `translate(${mx - bbox.width - 40}, ${my - 10})`).attr("opacity", 1);
     }
 
+    // Hide tooltip
     function hideTooltip() { tooltip.attr("opacity", 0); }
 
     // Axes
@@ -155,11 +163,13 @@ if (data.length === 0) {
       .selectAll("text").attr("fill", "white").attr("font-size", 14);
 
     // Axis labels
+    // X-axis label
     svg.append("text")
       .attr("x", width / 2).attr("y", height - 250)
       .attr("text-anchor", "middle").attr("font-size", 18).attr("fill", "white")
       .text("% of Flights Delayed");
 
+    // Y-axis label
     const plotMidY = margin.top + (height - margin.bottom - margin.top) / 2;
     svg.append("text")
       .attr("transform", `translate(28, ${plotMidY}) rotate(-90)`)
@@ -170,11 +180,13 @@ if (data.length === 0) {
     const legendGroup = svg.append("g")
       .attr("transform", `translate(${width - 240}, ${height - margin.bottom + 60})`);
 
+    // Color legend
     const colorLegend = legendGroup.append("g").attr("transform", "translate(0, 0)");
     colorLegend.append("text")
       .text("Volume of Flights")
       .attr("font-size", 14).attr("fill", "white").attr("y", 20);
 
+    // Define linear gradient for the color bar
     const gradId = `flightColor-${Math.random()}`;
     const defs = svg.append("defs");
     const gradient = defs.append("linearGradient").attr("id", gradId).attr("x1", "0%").attr("x2", "100%");
@@ -186,6 +198,7 @@ if (data.length === 0) {
       .attr("x", 0).attr("y", 25).attr("width", 200).attr("height", 14)
       .attr("fill", `url(#${gradId})`).attr("fill-opacity", 0.8).attr("stroke", "#444");
 
+    // Add axis to color scale
     const colorScale = d3.scaleLinear().domain(color.domain()).range([0, 200]);
     colorLegend.append("g")
       .attr("transform", "translate(0, 32)")
@@ -196,6 +209,7 @@ if (data.length === 0) {
     return svg.node();
   }
 
+  // Render and attach resize handler
   display(resize((width) => carrierBubblePlot(width)));
 }
 ```
@@ -213,11 +227,13 @@ The visualization supports two forms of interaction: hovering over a segment dis
 import * as d3 from "npm:d3";
 import {resize, html} from "npm:@observablehq/stdlib";
 
+// Load flight data with automatic type detection
 const flightData = await FileAttachment("data/flights.csv").csv({typed: true});
 
 // Aggregate all years by carrier
 const carrierMap = new Map(); // carrier_name -> { totalDelay, causeDelays }
 
+// Accumulate total delay and per‑cause delay minutes for each carrier
 for (const row of flightData) {
   const carrier = row.carrier_name?.trim();
   if (!carrier) continue;
@@ -270,7 +286,7 @@ if (top10.length === 0) {
 } else {
   function topAirlineChart(width) {
     const height = 550;
-    const margin = { top: 60, right: 220, bottom: 180, left: 70 }; // extra bottom space
+    const margin = { top: 60, right: 220, bottom: 180, left: 70 }; // extra bottom space for rotated labels otherwise cutoff
 
     const svg = d3.create("svg")
       .attr("width", width)
@@ -292,7 +308,7 @@ if (top10.length === 0) {
       .domain(causes.map(c => c.key))
       .range(causes.map(c => c.color));
 
-    // Stack data
+    // Stack data using the cause keys
     const stack = d3.stack().keys(causes.map(c => c.key));
     const stackedData = stack(top10);
 
@@ -302,7 +318,7 @@ if (top10.length === 0) {
       .call(d3.axisBottom(x))
       .selectAll("text")
       .attr("text-anchor", "end")
-      .attr("transform", "rotate(-40)")
+      .attr("transform", "rotate(-40)")   // rotate labels to avoid overlap
       .attr("dx", "-0.6em").attr("dy", "0.1em")
       .attr("fill", "white")
       .attr("font-size", 12);
@@ -323,6 +339,7 @@ if (top10.length === 0) {
       .attr("text-anchor", "middle").attr("font-size", 15).attr("fill", "white")
       .text("Share of Total Delay Minutes");
 
+    // Title
     svg.append("text")
       .attr("x", width / 2 - 100).attr("y", 32).attr("text-anchor", "middle")
       .attr("font-size", 20).attr("font-weight", 700).attr("fill", "white")
@@ -337,10 +354,11 @@ if (top10.length === 0) {
     const tipText = tooltip.append("text")
       .attr("font-size", 13).attr("x", 8).attr("y", 16).attr("fill", "#222");
 
-    let selectedCauseKey = null; // null = show all
+    let selectedCauseKey = null; // null = show all causes
 
     // Function to draw/update bars with current selection
     function drawBars() {
+      // Join stacked data to group elements, one per cause
       const groups = svg.selectAll("g.stack-layer")
         .data(stackedData, d => d.key);
       groups.exit().remove();
@@ -349,6 +367,7 @@ if (top10.length === 0) {
         .attr("fill", d => color(d.key));
       const allGroups = groupsEnter.merge(groups);
 
+      // Draw each rectangle in the stack
       allGroups.selectAll("rect")
         .data(d => d)
         .join("rect")
@@ -358,6 +377,7 @@ if (top10.length === 0) {
         .attr("width", x.bandwidth())
         .attr("opacity", function(d) {
           const layerKey = d3.select(this.parentNode).datum().key;
+          // Highlight only selected cause or show all
           return (selectedCauseKey === null || layerKey === selectedCauseKey) ? 1 : 0.15;
         });
     }
@@ -369,12 +389,13 @@ if (top10.length === 0) {
       .on("mousemove", function(event, d) {
         const layerKey = d3.select(this.parentNode).datum().key;
         let cause, value;
+        // Determine what to show based on legend selection
         if (selectedCauseKey !== null) {
           cause = causes.find(c => c.key === selectedCauseKey);
-          value = d.data[selectedCauseKey]; // percentage directly from data
+          value = d.data[selectedCauseKey]; // percentage directly from data object
         } else {
           cause = causes.find(c => c.key === layerKey);
-          value = d[1] - d[0]; // height of hovered segment
+          value = d[1] - d[0]; // height of hovered segment (%) 
         }
         const lines = [
           d.data.carrier,
@@ -401,6 +422,7 @@ if (top10.length === 0) {
         .attr("transform", `translate(0, ${i * 24})`)
         .style("cursor", "pointer")
         .on("click", () => {
+          // Toggle selection: clicking the same cause deselects (show all)
           if (selectedCauseKey === cause.key) {
             selectedCauseKey = null; // deselect
           } else {
@@ -416,10 +438,12 @@ if (top10.length === 0) {
           }
         });
 
+      // Color swatch for the legend item
       g.append("rect")
         .attr("width", 14).attr("height", 14)
         .attr("fill", cause.color)
         .attr("class", "legend-bg");
+      // Label
       g.append("text")
         .attr("x", 20).attr("y", 11)
         .attr("font-size", 13).attr("fill", "white")

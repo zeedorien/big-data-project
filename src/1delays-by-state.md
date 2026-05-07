@@ -57,7 +57,7 @@ if (airportTable.length === 0) {
   } catch (err) {
     display(html`<div style="color:red; padding:20px;">Failed to load US map data: ${err.message}</div>`);
     // Stop execution by throwing? But we can just return early using a dummy div – but we are inside an else block, so we'll set a flag.
-    // We'll wrap the rest in a condition.
+    // Wrap the rest in a condition.
     geojson = null;
   }
 
@@ -138,6 +138,7 @@ if (airportTable.length === 0) {
       const tipRect = tooltip.append("rect").attr("fill", "white").attr("stroke", "#333").attr("rx", 4).attr("ry", 4).attr("opacity", 0.95);
       const tipText = tooltip.append("text").attr("font-size", 14).attr("x", 8).attr("y", 18).attr("font-weight", 600);
 
+      // Define tooltip line structure, tabbing (for orderly columns), and position relative to cursor
       function showTooltip(name, abbr, s, event) {
         const flights = s?.flights ?? 0;
         const delayMin = s?.delayMin ?? 0;
@@ -207,10 +208,10 @@ if (airportTable.length === 0) {
       return svg.node();
     }
 
-    // WORK INSHALLAH
+    // WORK PLZ PLZ PLZ JUST SHOW UP
     display(resize((width) => stateDelayMap(width)));
   } else {
-    // why won't this work????
+    // bruh
     display(html`<div style="color:red; padding:20px;">Failed to convert TopoJSON to GeoJSON. Check the map data source.</div>`);
   }
 }

@@ -25,16 +25,18 @@ Late Aircraft emerges as the dominant contributor across all months, followed by
 The tooltip that appears when hovering over the line chart shows the composition of delays for any given month. In general, it appears the proportion of delay causes remains steady across all months, with only total delay volume fluctuating. The breakdown also suggests that operational factors like aircraft turnaround times and airline scheduling decisions have the greatest effect on airline delays.
 
 ```js
-
 // Monthly delay lines - aggregated across all years
 import * as d3 from "npm:d3";
 import {resize, html} from "npm:@observablehq/stdlib";
 
+// Load flight data from CSV
 const flightData = await FileAttachment("data/flights.csv").csv({typed: true});
 
 // Aggregate all rows by month (ignoring year)
-const monthlyMap = new Map(); // key: month number
+// key: month number
+const monthlyMap = new Map();
 
+// Sum each delay cause and total flight count per calendar month
 for (const row of flightData) {
   const month = +row.month;
   if (!monthlyMap.has(month)) {
@@ -70,34 +72,39 @@ for (const d of monthlyData) {
 if (monthlyData.length === 0) {
   display(html`<div style="color:red;">No monthly data found.</div>`);
 } else {
-  // Chart function (similar structure but using yearly aggregated data)
+  // Define the monthly aggregated line chart function
   function monthlyAggChart(width) {
     const height = 560;
     const margin = { top: 80, right: 230, bottom: 80, left: 125 };
+    // Month abbreviations for x-axis ticks
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    // Ensure all months 1..12 exist
+    // Ensure all months 1..12 exist (fill missing months with zeros)
     const data = [];
     for (let m = 1; m <= 12; m++) {
       const row = monthlyData.find(d => d.month === m);
       data.push(row || { month: m, carrierDelay:0, weatherDelay:0, nasDelay:0, securityDelay:0, lateAircraftDelay:0, totalDelay:0, totalFlights:0 });
     }
 
+    // x: point scale for months (1–12)
     const x = d3.scalePoint()
       .domain(data.map(d => d.month))
       .range([margin.left, width - margin.right])
       .padding(0.25);
 
+    // y: linear scale covering the maximum of any delay cause (plus headroom)
     const maxY = d3.max(data, d => Math.max(d.totalDelay, d.carrierDelay, d.weatherDelay, d.nasDelay, d.securityDelay, d.lateAircraftDelay));
     const y = d3.scaleLinear()
       .domain([0, maxY * 1.12])
       .range([height - margin.bottom, margin.top]);
 
+    // Line generator using straight segments
     const line = d3.line()
       .curve(d3.curveLinear)   // straight lines between points
       .x(d => x(d.month))
       .y(d => y(d.value));
 
+    // Define the series: each cause + total, with color, stroke, and pre-processed values
     const series = [
       { key: "total", name: "Total", color: "#2f6b1f", strokeWidth: 5,
         values: data.map(d => ({ month: d.month, value: d.totalDelay })) },
@@ -134,11 +141,10 @@ if (monthlyData.length === 0) {
 
     svg.append("g")
         .attr("transform", `translate(${margin.left},0)`)
-        .call(d3.axisLeft(y).tickFormat(d => (d / 1e6).toFixed(0) + "m"))
+        .call(d3.axisLeft(y).tickFormat(d => (d / 1e6).toFixed(0) + "m"))  // format in millions
         .selectAll("text")
         .attr("font-size", 14)
         .attr("fill", "white");
-      
 
     // Axis labels
     svg.append("text")
@@ -154,7 +160,7 @@ if (monthlyData.length === 0) {
       .attr("fill", "white")
       .text("Total Delay Minutes");
 
-    // Lines
+    // Lines: draw one path per series
     svg.append("g")
       .selectAll("path")
       .data(series)
@@ -164,7 +170,7 @@ if (monthlyData.length === 0) {
       .attr("stroke-width", 1.5)   // thinner, uniform lines
       .attr("d", d => line(d.values));
 
-    // Add circles for each series
+    // Add circles for each series data point
     series.forEach(s => {
     svg.append("g")
         .selectAll("circle")
@@ -178,7 +184,7 @@ if (monthlyData.length === 0) {
         .attr("opacity", 0.8);
     });
 
-    // Legend
+    // Legend (positioned to the right of the plot)
     const legend = svg.append("g")
       .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
     legend.selectAll("legend-item")
@@ -195,7 +201,7 @@ if (monthlyData.length === 0) {
           .text(d.name);
       });
 
-    // Hover interaction (same as previous)
+    // Hover interaction: vertical crosshair + multi‑line tooltip
     const hover = svg.append("g").style("pointer-events", "none").attr("opacity", 0);
     const vline = hover.append("line")
       .attr("y1", margin.top).attr("y2", height - margin.bottom)
@@ -206,9 +212,11 @@ if (monthlyData.length === 0) {
       .attr("rx", 8).attr("ry", 8).attr("opacity", 0.96);
     const tipG = tip.append("g").attr("transform", "translate(12, 18)");
 
+    // Number formatters
     const fmtInt = d3.format(",");
     const fmtPct = d3.format(".1f");
 
+    // Find the nearest month to a given mouse x-coordinate
     function nearestMonth(mx) {
       const dom = x.domain();
       let best = dom[0], bestDist = Infinity;
@@ -219,8 +227,10 @@ if (monthlyData.length === 0) {
       return best;
     }
 
+    // Build and show the tooltip at current mouse position
     function showAt(event) {
       const [mx, my] = d3.pointer(event, svg.node());
+      // Ignore if outside the chart area
       if (mx < margin.left || mx > width - margin.right || my < margin.top || my > height - margin.bottom) {
         hover.attr("opacity", 0);
         return;
@@ -232,6 +242,7 @@ if (monthlyData.length === 0) {
       const total = row.totalDelay;
       const flights = row.totalFlights;
 
+      // Define breakdown rows for the tooltip
       const parts = [
         { label: "Carrier", val: row.carrierDelay },
         { label: "Weather", val: row.weatherDelay },
@@ -240,6 +251,7 @@ if (monthlyData.length === 0) {
         { label: "Security", val: row.securityDelay }
       ];
 
+      // Position the vertical line at the selected month
       vline.attr("x1", x(m)).attr("x2", x(m));
       tipG.selectAll("*").remove();
 
@@ -247,11 +259,13 @@ if (monthlyData.length === 0) {
       const colLabelX = 0, colMinX = 250, colPctX = 340;
       let yCursor = 0;
 
+      // Header: month name
       tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
         .attr("font-size", 14).attr("font-weight", 800)
         .text(`${months[m - 1]} (Aggregated)`);
       yCursor += lineH + 4;
 
+      // Total delay and flight count
       tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
         .attr("font-size", 13).text("Total delay:");
       tipG.append("text").attr("x", colMinX).attr("y", yCursor).attr("text-anchor", "end")
@@ -264,6 +278,7 @@ if (monthlyData.length === 0) {
         .attr("font-size", 13).text(fmtInt(Math.round(flights)));
       yCursor += lineH + 10;
 
+      // Column headers for breakdown
       tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
         .attr("font-size", 13).attr("font-weight", 800)
         .text("Delay Cause Breakdown");
@@ -277,6 +292,7 @@ if (monthlyData.length === 0) {
         .attr("font-size", 12.5).attr("font-weight", 700).text("(%)");
       yCursor += lineH;
 
+      // Each cause row
       parts.forEach(p => {
         const pct = total > 0 ? (p.val / total) * 100 : 0;
         tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
@@ -288,6 +304,7 @@ if (monthlyData.length === 0) {
         yCursor += lineH;
       });
 
+      // Size the background rect and position the tooltip, keeping it in bounds
       const bbox = tipG.node().getBBox();
       tipRect.attr("x", 0).attr("y", 0)
         .attr("width", bbox.width + 24).attr("height", bbox.height + 24);
@@ -301,6 +318,7 @@ if (monthlyData.length === 0) {
       hover.attr("opacity", 1);
     }
 
+    // Transparent overlay to capture mouse events across the chart area
     svg.append("rect")
       .attr("x", margin.left).attr("y", margin.top)
       .attr("width", (width - margin.right) - margin.left)
@@ -313,6 +331,7 @@ if (monthlyData.length === 0) {
     return svg.node();
   }
 
+  // Attach the chart to the page with automatic resize handling
   display(resize((width) => monthlyAggChart(width)));
 }
 ```
@@ -328,10 +347,11 @@ A similar line chart constructed for the entire date range reinforces the conclu
 import * as d3 from "npm:d3";
 import {resize, html} from "npm:@observablehq/stdlib";
 
+// Load flight data
 const flightData = await FileAttachment("data/flights.csv").csv({typed: true});
 
 // Aggregate by year + month
-const monthlyMap = new Map();
+const monthlyMap = new Map(); // key: "year-month"
 for (const row of flightData) {
   const year = +row.year;
   const month = +row.month;
@@ -356,14 +376,17 @@ for (const row of flightData) {
   agg.totalFlights += +row.arr_flights || 0;
 }
 
+// Convert to array, compute total delay and Date object, then sort chronologically
 let monthlyData = Array.from(monthlyMap.values());
 for (const d of monthlyData) {
   d.totalDelay = d.carrierDelay + d.weatherDelay + d.nasDelay + d.securityDelay + d.lateAircraftDelay;
-  d.date = new Date(d.year, d.month - 1, 1);
+  d.date = new Date(d.year, d.month - 1, 1); // first day of the month
 }
 monthlyData.sort((a,b) => a.date - b.date);
 
+// Full time series chart function
 function fullTimeSeriesChart(width) {
+  // Chart dimensions
   const height = 560;
   const margin = { top: 80, right: 160, bottom: 100, left: 80 };
 
@@ -372,15 +395,17 @@ function fullTimeSeriesChart(width) {
     .attr("height", height)
     .style("overflow", "visible");
 
+  // x: time scale covering the full date range
   const x = d3.scaleTime()
     .domain(d3.extent(monthlyData, d => d.date))
     .range([margin.left, width - margin.right]);
 
+  // y: linear scale with fixed upper limit (16 million minutes) for consistent magnitude
   const y = d3.scaleLinear()
     .domain([0, 16_000_000])
     .range([height - margin.bottom, margin.top]);
 
-  // Line generator
+  // Line generator (straight segments)
   const line = d3.line()
     .curve(d3.curveLinear)
     .x(d => x(d.date))
@@ -420,13 +445,14 @@ function fullTimeSeriesChart(width) {
 
   // X axis (years, angled right/down)
   const xAxis = d3.axisBottom(x)
-    .tickValues(monthlyData.filter(d => d.month === 1).map(d => d.date))
+    .tickValues(monthlyData.filter(d => d.month === 1).map(d => d.date))   // tick at each January
     .tickFormat(d3.timeFormat("%Y"));
 
   const xAxisG = svg.append("g")
     .attr("transform", `translate(0, ${height - margin.bottom})`)
     .call(xAxis);
 
+  // Rotate and style axis labels
   xAxisG.selectAll("text")
     .attr("transform", "rotate(30)")
     .attr("dx", "0.2em")
@@ -435,7 +461,7 @@ function fullTimeSeriesChart(width) {
     .attr("fill", "white")
     .attr("font-size", 12);
 
-  // Y axis (abbreviated)
+  // Y axis (abbreviated in millions)
   svg.append("g")
     .attr("transform", `translate(${margin.left},0)`)
     .call(d3.axisLeft(y).tickFormat(d => (d / 1e6).toFixed(0) + "m"))
@@ -481,24 +507,30 @@ function fullTimeSeriesChart(width) {
 
   // ----- Tooltip (same as before, but only for total delay? Keep full breakdown) -----
   const hover = svg.append("g").style("pointer-events", "none").attr("opacity", 0);
+  // Vertical guide line
   const vline = hover.append("line")
     .attr("y1", margin.top).attr("y2", height - margin.bottom)
     .attr("stroke", "white").attr("stroke-width", 1).attr("stroke-dasharray", "4,4");
+  // Tooltip container
   const tip = hover.append("g");
   const tipRect = tip.append("rect")
     .attr("fill", "white").attr("stroke", "#333")
     .attr("rx", 8).attr("ry", 8).attr("opacity", 0.96);
   const tipG = tip.append("g").attr("transform", "translate(12, 18)");
 
+  // Formatters for integers and a date bisector to find nearest data point
   const fmtInt = d3.format(",");
   const bisectDate = d3.bisector(d => d.date).left;
 
+  // Show tooltip for the closest month
   function showTooltip(event) {
     const [mx, my] = d3.pointer(event, svg.node());
+    // Ignore outside plot area
     if (mx < margin.left || mx > width - margin.right || my < margin.top || my > height - margin.bottom) {
       hover.attr("opacity", 0);
       return;
     }
+    // Find the data point nearest in time
     const x0 = x.invert(mx);
     const idx = bisectDate(monthlyData, x0, 1);
     const d0 = monthlyData[idx - 1];
@@ -506,13 +538,16 @@ function fullTimeSeriesChart(width) {
     const row = !d1 ? d0 : (x0 - d0.date < d1.date - x0 ? d0 : d1);
     if (!row) return;
 
+    // Place vertical line at the chosen month
     vline.attr("x1", x(row.date)).attr("x2", x(row.date));
 
+    // Build the tooltip text
     const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const header = `${monthNames[row.month-1]} ${row.year}`;
     const total = row.totalDelay;
     const flights = row.totalFlights;
 
+    // Cause breakdown for the tooltip
     const parts = [
       { label: "Carrier", val: row.carrierDelay },
       { label: "Weather", val: row.weatherDelay },
@@ -526,11 +561,13 @@ function fullTimeSeriesChart(width) {
     const colLabelX = 0, colMinX = 250, colPctX = 340;
     let yCursor = 0;
 
+    // Header
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 14).attr("font-weight", 800)
       .text(header);
     yCursor += lineH + 4;
 
+    // Total delay and flights
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 13).text("Total delay:");
     tipG.append("text").attr("x", colMinX).attr("y", yCursor).attr("text-anchor", "end")
@@ -543,6 +580,7 @@ function fullTimeSeriesChart(width) {
       .attr("font-size", 13).text(fmtInt(Math.round(flights)));
     yCursor += lineH + 10;
 
+    // Column headers for breakdown
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 13).attr("font-weight", 800)
       .text("Delay Cause Breakdown");
@@ -556,6 +594,7 @@ function fullTimeSeriesChart(width) {
       .attr("font-size", 12.5).attr("font-weight", 700).text("(%)");
     yCursor += lineH;
 
+    // Rows for each cause with minutes and percentage of total
     parts.forEach(p => {
       const pct = total > 0 ? (p.val / total) * 100 : 0;
       tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
@@ -567,6 +606,7 @@ function fullTimeSeriesChart(width) {
       yCursor += lineH;
     });
 
+    // Position the tooltip box, keeping it within the chart bounds
     const bbox = tipG.node().getBBox();
     tipRect.attr("x", 0).attr("y", 0)
       .attr("width", bbox.width + 24).attr("height", bbox.height + 24);
@@ -580,6 +620,7 @@ function fullTimeSeriesChart(width) {
     hover.attr("opacity", 1);
   }
 
+  // Transparent overlay to capture mouse events across the chart area
   svg.append("rect")
     .attr("x", margin.left).attr("y", margin.top)
     .attr("width", (width - margin.right) - margin.left)
@@ -591,7 +632,8 @@ function fullTimeSeriesChart(width) {
   return svg.node();
 }
 
-display(resize((width) => fullTimeSeriesChart(width))); 
+// Attach the chart with responsive resizing
+display(resize((width) => fullTimeSeriesChart(width)));
 ```
 
 ---
@@ -605,6 +647,7 @@ A final set of visualizations allows examination of the dataset by specific year
 import * as d3 from "npm:d3";
 import {resize, html} from "npm:@observablehq/stdlib";
 
+// Load flight data
 const flightData = await FileAttachment("data/flights.csv").csv({typed: true});
 
 // 1. Aggregate by year + month
@@ -635,7 +678,7 @@ for (const row of flightData) {
 
 // Convert to array and group by year
 const allData = Array.from(yearMonthMap.values());
-const years = [...new Set(allData.map(d => d.year))].sort((a,b) => a - b);
+const years = [...new Set(allData.map(d => d.year))].sort((a,b) => a - b); // unique sorted years
 
 // For each year, create a 12‑month array (missing months = zeros)
 const yearlyData = new Map(); // year -> array[1..12] of {month, carrierDelay, ...}
@@ -655,6 +698,7 @@ for (const y of years) {
         totalDelay: row.carrierDelay + row.weatherDelay + row.nasDelay + row.securityDelay + row.lateAircraftDelay
       });
     } else {
+      // Fill missing months with zeros
       monthsArr.push({
         month: m,
         carrierDelay: 0, weatherDelay: 0, nasDelay: 0,
@@ -693,28 +737,33 @@ for (let m = 1; m <= 12; m++) {
 
 // ----- Chart drawing function (identical to previous, but accepts 'monthlyData' array and a title suffix) -----
 function drawMonthChart(monthlyData, titleSuffix, width) {
+  // Chart dimensions and margins
   const height = 560;
   const margin = { top: 80, right: 230, bottom: 80, left: 125 };
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-  // Ensure dailyData has 12 entries (it should, but safety)
-  const data = monthlyData.slice(); // copy
+  // Use a copy of the data (already a 12‑element array)
+  const data = monthlyData.slice();
 
+  // x: point scale for months 1–12
   const x = d3.scalePoint()
     .domain(data.map(d => d.month))
     .range([margin.left, width - margin.right])
     .padding(0.25);
 
+  // y: linear scale, fixed upper bound for comparability
   const maxY = d3.max(data, d => Math.max(d.totalDelay, d.carrierDelay, d.weatherDelay, d.nasDelay, d.securityDelay, d.lateAircraftDelay));
   const y = d3.scaleLinear()
     .domain([0, 16_000_000])
     .range([height - margin.bottom, margin.top]);
 
+  // Line generator (straight segments)
   const line = d3.line()
     .curve(d3.curveLinear)
     .x(d => x(d.month))
     .y(d => y(d.value));
 
+  // Series definitions with pre‑mapped values
   const series = [
     { key: "total", name: "Total", color: "#2f6b1f",
       values: data.map(d => ({ month: d.month, value: d.totalDelay })) },
@@ -780,7 +829,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     .attr("stroke-width", 1.5)
     .attr("d", d => line(d.values));
 
-  // Circles
+  // Circles for each data point
   series.forEach(s => {
     svg.append("g")
       .selectAll("circle")
@@ -794,7 +843,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
       .attr("opacity", 0.8);
   });
 
-  // Legend
+  // Legend (positioned to the right)
   const legend = svg.append("g")
     .attr("transform", `translate(${width - margin.right + 20}, ${margin.top})`);
   legend.selectAll("legend-item")
@@ -824,9 +873,11 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     .attr("rx", 8).attr("ry", 8).attr("opacity", 0.96);
   const tipG = tip.append("g").attr("transform", "translate(12, 18)");
 
+  // Formatters
   const fmtInt = d3.format(",");
   const fmtPct = d3.format(".1f");
 
+  // Find the nearest month to a mouse x-position
   function nearestMonth(mx) {
     const dom = x.domain();
     let best = dom[0], bestDist = Infinity;
@@ -837,6 +888,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     return best;
   }
 
+  // Show tooltip with breakdown
   function showAt(event) {
     const [mx, my] = d3.pointer(event, svg.node());
     if (mx < margin.left || mx > width - margin.right || my < margin.top || my > height - margin.bottom) {
@@ -850,6 +902,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     const total = row.totalDelay;
     const flights = row.totalFlights;
 
+    // Cause breakdown
     const parts = [
       { label: "Carrier", val: row.carrierDelay },
       { label: "Weather", val: row.weatherDelay },
@@ -858,6 +911,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
       { label: "Security", val: row.securityDelay }
     ];
 
+    // Position vertical line
     vline.attr("x1", x(m)).attr("x2", x(m));
     tipG.selectAll("*").remove();
 
@@ -865,11 +919,13 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     const colLabelX = 0, colMinX = 250, colPctX = 340;
     let yCursor = 0;
 
+    // Month header
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 14).attr("font-weight", 800)
       .text(`${months[m - 1]} (${titleSuffix})`);
     yCursor += lineH + 4;
 
+    // Total delay and flights
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 13).text("Total delay:");
     tipG.append("text").attr("x", colMinX).attr("y", yCursor).attr("text-anchor", "end")
@@ -882,6 +938,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
       .attr("font-size", 13).text(fmtInt(Math.round(flights)));
     yCursor += lineH + 10;
 
+    // Column headers for breakdown
     tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
       .attr("font-size", 13).attr("font-weight", 800)
       .text("Delay Cause Breakdown");
@@ -895,6 +952,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
       .attr("font-size", 12.5).attr("font-weight", 700).text("(%)");
     yCursor += lineH;
 
+    // Each cause row
     parts.forEach(p => {
       const pct = total > 0 ? (p.val / total) * 100 : 0;
       tipG.append("text").attr("x", colLabelX).attr("y", yCursor)
@@ -906,6 +964,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
       yCursor += lineH;
     });
 
+    // Size and move tooltip box, keep within chart bounds
     const bbox = tipG.node().getBBox();
     tipRect.attr("x", 0).attr("y", 0)
       .attr("width", bbox.width + 24).attr("height", bbox.height + 24);
@@ -919,6 +978,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
     hover.attr("opacity", 1);
   }
 
+  // Transparent overlay to capture mouse events
   svg.append("rect")
     .attr("x", margin.left).attr("y", margin.top)
     .attr("width", (width - margin.right) - margin.left)
@@ -934,7 +994,7 @@ function drawMonthChart(monthlyData, titleSuffix, width) {
 // ----- UI: dropdown + chart container -----
 const container = document.createElement("div");
 
-// Dropdown selector
+// Dropdown selector for years
 const select = document.createElement("select");
 select.style.marginBottom = "20px";
 select.style.padding = "8px";
@@ -943,10 +1003,7 @@ select.style.backgroundColor = "#222";
 select.style.color = "white";
 select.style.border = "1px solid #555";
 
-// const allOption = document.createElement("option");
-// allOption.value = "all";
-// allOption.textContent = "All years (aggregated)";
-// select.appendChild(allOption);
+// Populate dropdown with years (no "All years" option in this version)
 for (const y of years) {
   const opt = document.createElement("option");
   opt.value = y;
@@ -959,8 +1016,7 @@ container.appendChild(select);
 const chartDiv = document.createElement("div");
 container.appendChild(chartDiv);
 
-// Helper to update chart based on selection
-// Replace the updateChart function with this version
+// Helper to update chart with fade transition
 let currentWrapper = null;
 
 function updateChart() {
@@ -974,24 +1030,25 @@ function updateChart() {
   const containerWidth = chartDiv.clientWidth || 900;
   const newSvg = drawMonthChart(monthlyData, titleSuffix, containerWidth);
   newSvg.classList.add("chart-svg");
-  newSvg.style.opacity = "0";
+  newSvg.style.opacity = "0"; // start hidden for fade-in
 
   if (currentWrapper) {
-    // Fade out current
+    // Fade out current chart
     currentWrapper.style.transition = "opacity 0.2s ease";
     currentWrapper.style.opacity = "0";
     setTimeout(() => {
       chartDiv.removeChild(currentWrapper);
       chartDiv.appendChild(newSvg);
-      // Force reflow (multiple methods)
-      void newSvg.offsetHeight;                // forces layout
-      window.getComputedStyle(newSvg).opacity; // also forces reflow
-      // Then fade in
+      // Force reflow so the browser applies the opacity transition
+      void newSvg.offsetHeight;                // triggers layout
+      window.getComputedStyle(newSvg).opacity; // ensures style is computed
+      // Fade in
       newSvg.style.transition = "opacity 0.2s ease";
       newSvg.style.opacity = "1";
       currentWrapper = newSvg;
-    }, 200);
+    }, 200); // match transition duration
   } else {
+    // First draw: no fade-out needed
     chartDiv.appendChild(newSvg);
     void newSvg.offsetHeight;
     newSvg.style.transition = "opacity 0.2s ease";
@@ -1004,6 +1061,7 @@ select.addEventListener("change", () => updateChart());
 // Initial draw
 updateChart();
 
+// Display the full UI container
 display(container);
 ```
 
